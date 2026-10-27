@@ -1,3 +1,5 @@
 seisbench
 obspy
 matplotlib
+pandas
+pyocto

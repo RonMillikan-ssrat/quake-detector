@@ -1,8 +1,16 @@
+# environments / OS
 venv/
 .venv/
 __pycache__/
 *.pyc
 .DS_Store
-*.mseed
+
+# data: large, re-downloadable
 data/
-phase1_run.txt
+*.mseed
+
+# regenerated outputs
+out*/
+review/*.png
+*_run.txt
+phase2_*.txt
