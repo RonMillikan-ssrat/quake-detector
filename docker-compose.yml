@@ -1,0 +1,61 @@
+# Phase 4a: the live detector as services. One image, a different command per service.
+#   docker compose up -d && docker compose logs -f ingest picker-0 picker-1 associator
+
+x-qd: &qd
+  image: quake-detector
+  restart: unless-stopped
+  networks: [qd]
+  depends_on: [redis, postgres]
+
+x-env: &env
+  REDIS_URL: redis://redis:6379/0
+  PG_DSN: postgresql://quake:quake@postgres:5432/quake
+  SHARDS: "2"            # must equal the number of picker services
+
+services:
+  redis:
+    image: redis:7-alpine
+    networks: [qd]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: quake
+      POSTGRES_PASSWORD: quake
+      POSTGRES_DB: quake
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [qd]
+
+  ingest:
+    <<: *qd
+    command: python -m services.ingest
+    environment: *env
+
+  picker-0:
+    <<: *qd
+    command: python -m services.picker
+    environment:
+      <<: *env
+      SHARD: "0"
+
+  picker-1:
+    <<: *qd
+    command: python -m services.picker
+    environment:
+      <<: *env
+      SHARD: "1"
+
+  associator:
+    <<: *qd
+    command: python -m services.associator
+    environment: *env
+
+networks:
+  qd:
+    driver_opts:
+      # VPN tunnel (wgpia0) carries 1414-byte packets; Docker's default 1500 stalls
+      # large SeedLink replies. Keep this below the smallest MTU on the path.
+      com.docker.network.driver.mtu: "1400"
+
+volumes:
+  pgdata:

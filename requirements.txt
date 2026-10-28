@@ -3,3 +3,6 @@ obspy
 matplotlib
 pandas
 pyocto
+redis
+psycopg[binary]
+prometheus_client

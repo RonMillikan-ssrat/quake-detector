@@ -1,0 +1,12 @@
+.git/
+data/
+out*/
+live/
+review/
+results/
+venv/
+.venv/
+__pycache__/
+*.png
+*.txt
+!requirements.txt
