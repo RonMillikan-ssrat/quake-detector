@@ -1,0 +1,5 @@
+# Everything for the detector lives in one namespace: easy to inspect, easy to delete.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quake

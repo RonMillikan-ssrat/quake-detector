@@ -1,0 +1,39 @@
+# Picks -> events -> Postgres. Singleton (must see every pick), so Recreate like ingest.
+# PG_DSN is assembled from the Secret: Kubernetes expands $(VAR) in an env value when
+# VAR is defined earlier in the same env list.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: associator
+  namespace: quake
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: associator}
+  template:
+    metadata:
+      labels: {app: associator}
+    spec:
+      containers:
+        - name: associator
+          image: quake-detector:latest
+          imagePullPolicy: Never
+          command: [python, -m, services.associator]
+          envFrom: [{configMapRef: {name: qd-config}}]
+          env:
+            - name: PG_USER
+              valueFrom: {secretKeyRef: {name: pg, key: POSTGRES_USER}}
+            - name: PG_PASSWORD
+              valueFrom: {secretKeyRef: {name: pg, key: POSTGRES_PASSWORD}}
+            - name: PG_DSN
+              value: postgresql://$(PG_USER):$(PG_PASSWORD)@postgres:5432/quake
+          ports: [{name: metrics, containerPort: 9100}]
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {memory: 1Gi}
+          livenessProbe:
+            exec:
+              command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 60']
+            initialDelaySeconds: 120      # waits for postgres and the station list first
+            periodSeconds: 30

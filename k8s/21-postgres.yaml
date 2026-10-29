@@ -1,0 +1,46 @@
+# Event and pick storage. A StatefulSet with a volumeClaimTemplate gets a
+# PersistentVolume that survives pod restarts (k3s provides it via local-path).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: quake
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: postgres}
+  template:
+    metadata:
+      labels: {app: postgres}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom: [{secretRef: {name: pg}}]
+          env:
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}   # subdir of the volume
+          ports: [{containerPort: 5432}]
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          readinessProbe:
+            exec: {command: [pg_isready, -U, quake]}
+            periodSeconds: 10
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 2Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: quake
+spec:
+  selector: {app: postgres}
+  ports: [{port: 5432}]

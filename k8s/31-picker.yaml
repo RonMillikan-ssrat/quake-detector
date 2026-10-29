@@ -1,0 +1,49 @@
+# PhaseNet pickers. A StatefulSet gives each pod a stable name -- picker-0, picker-1 --
+# and services.common.my_shard() takes the shard number from that ordinal. So every pod
+# knows which wf:<shard> stream it owns with no per-pod config.
+#
+# To scale: set replicas here AND SHARDS in the ConfigMap to the same value, then
+# restart ingest so it routes stations to the new shard count.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: picker
+  namespace: quake
+spec:
+  serviceName: picker
+  replicas: 2
+  podManagementPolicy: Parallel          # start all pickers at once, not one by one
+  selector:
+    matchLabels: {app: picker}
+  template:
+    metadata:
+      labels: {app: picker}
+    spec:
+      containers:
+        - name: picker
+          image: quake-detector:latest
+          imagePullPolicy: Never
+          command: [python, -m, services.picker]
+          envFrom: [{configMapRef: {name: qd-config}}]
+          ports: [{name: metrics, containerPort: 9100}]
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {memory: 2Gi}
+          livenessProbe:                  # picker beats every cycle, data or not
+            exec:
+              command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 60']
+            initialDelaySeconds: 60
+            periodSeconds: 30
+---
+# Headless Service (clusterIP: None): required by a StatefulSet for stable pod DNS names
+# (picker-0.picker.quake.svc). Nothing connects to pickers; this also lets Prometheus
+# find each pod's metrics port later.
+apiVersion: v1
+kind: Service
+metadata:
+  name: picker
+  namespace: quake
+spec:
+  clusterIP: None
+  selector: {app: picker}
+  ports: [{name: metrics, port: 9100}]

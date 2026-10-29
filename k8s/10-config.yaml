@@ -1,0 +1,35 @@
+# Settings for all services, injected as environment variables (envFrom).
+# Change a value, then restart the pods that read it:
+#   kubectl -n quake rollout restart deploy/associator
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qd-config
+  namespace: quake
+data:
+  REDIS_URL: redis://redis:6379/0          # "redis" = the Service name, resolved by cluster DNS
+  SHARDS: "2"                              # MUST equal picker StatefulSet replicas
+  BOX_MINLAT: "31.0"
+  BOX_MAXLAT: "32.2"
+  BOX_MINLON: "-104.6"
+  BOX_MAXLON: "-103.0"
+  WEIGHTS: instance
+  THRESH: "0.3"
+  STEP_S: "10"
+  SETTLE_S: "30"
+  VP: "5.5"
+  VS: "3.1"
+  N_PICKS: "6"
+  N_PS: "3"
+---
+# Database credentials. A Secret is only base64-encoded, not encrypted, unless the cluster
+# encrypts secrets at rest -- fine for a local cluster, use a secret manager on GKE.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pg
+  namespace: quake
+stringData:
+  POSTGRES_USER: quake
+  POSTGRES_PASSWORD: quake
+  POSTGRES_DB: quake

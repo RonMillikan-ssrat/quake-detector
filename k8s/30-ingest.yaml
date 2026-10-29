@@ -1,0 +1,34 @@
+# SeedLink -> Redis. Singleton:
+#   replicas: 1, and strategy Recreate so an update stops the old pod BEFORE starting the
+#   new one (the default RollingUpdate would briefly run two, publishing every record twice).
+# Liveness: the heartbeat is touched only when data arrives, so a silent feed gets the
+# pod restarted, which reconnects to TexNet.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingest
+  namespace: quake
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: ingest}
+  template:
+    metadata:
+      labels: {app: ingest}
+    spec:
+      containers:
+        - name: ingest
+          image: quake-detector:latest
+          imagePullPolicy: Never          # image imported into k3s locally, not in a registry
+          command: [python, -m, services.ingest]
+          envFrom: [{configMapRef: {name: qd-config}}]
+          ports: [{name: metrics, containerPort: 9100}]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          livenessProbe:
+            exec:
+              command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 120']
+            initialDelaySeconds: 180      # station list + SeedLink connect can take a while
+            periodSeconds: 30
