@@ -16,7 +16,7 @@ from obspy import Stream
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
 import seisbench.models as sbm
-from services.common import Bus, beat, cfg, my_shard
+from services.common import STOP, Bus, beat, cfg, handle_signals, my_shard
 
 INFER = Histogram("qd_picker_infer_seconds", "PhaseNet seconds per cycle",
                   buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10))
@@ -26,6 +26,7 @@ STATIONS = Gauge("qd_picker_stations", "Stations with >=35 s buffered")
 
 def main():
     c = cfg()
+    handle_signals()
     shard = my_shard()
     start_http_server(c.metrics_port)
     bus = Bus(c.redis_url)
@@ -36,7 +37,7 @@ def main():
 
     buf, held = Stream(), []          # held: (station, phase, timestamp) for de-duplication
     next_t = time.time() + c.step_s
-    while True:
+    while not STOP.is_set():
         last, entries = bus.read(stream, last, block_ms=(next_t - time.time()) * 1000)
         for f in entries:
             buf += Bus.to_trace(f)
@@ -84,6 +85,7 @@ def main():
             n_new += 1
         print(f"shard {shard}: {len(ends)} sta, infer {time.time() - tic:.2f} s, "
               f"+{n_new} picks", flush=True)
+    print(f"picker shard {shard} stopped cleanly", flush=True)
 
 
 if __name__ == "__main__":

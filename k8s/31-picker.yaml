@@ -18,6 +18,9 @@ spec:
   template:
     metadata:
       labels: {app: picker}
+      annotations:                       # Prometheus discovers pods by these
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
     spec:
       containers:
         - name: picker
@@ -29,10 +32,17 @@ spec:
           resources:
             requests: {cpu: 500m, memory: 1Gi}
             limits: {memory: 2Gi}
+          # Startup probe: checked every 10 s, up to 60 times (10 min), until the first
+          # heartbeat is fresh. Liveness is not checked until this passes, so a slow start
+          # (station list retries, waiting for postgres or ingest) is not mistaken for a hang.
+          startupProbe:
+            exec:
+              command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 60']
+            periodSeconds: 10
+            failureThreshold: 60
           livenessProbe:                  # picker beats every cycle, data or not
             exec:
               command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 60']
-            initialDelaySeconds: 60
             periodSeconds: 30
 ---
 # Headless Service (clusterIP: None): required by a StatefulSet for stable pod DNS names

@@ -16,6 +16,9 @@ spec:
   template:
     metadata:
       labels: {app: ingest}
+      annotations:                       # Prometheus discovers pods by these
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
     spec:
       containers:
         - name: ingest
@@ -27,8 +30,15 @@ spec:
           resources:
             requests: {cpu: 100m, memory: 256Mi}
             limits: {memory: 1Gi}
+          # Startup probe: checked every 10 s, up to 60 times (10 min), until the first
+          # heartbeat is fresh. Liveness is not checked until this passes, so a slow start
+          # (station list retries, waiting for postgres or ingest) is not mistaken for a hang.
+          startupProbe:
+            exec:
+              command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 120']
+            periodSeconds: 10
+            failureThreshold: 60
           livenessProbe:
             exec:
               command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 120']
-            initialDelaySeconds: 180      # station list + SeedLink connect can take a while
             periodSeconds: 30

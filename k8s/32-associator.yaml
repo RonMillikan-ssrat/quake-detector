@@ -14,6 +14,9 @@ spec:
   template:
     metadata:
       labels: {app: associator}
+      annotations:                       # Prometheus discovers pods by these
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
     spec:
       containers:
         - name: associator
@@ -32,8 +35,15 @@ spec:
           resources:
             requests: {cpu: 250m, memory: 512Mi}
             limits: {memory: 1Gi}
+          # Startup probe: checked every 10 s, up to 60 times (10 min), until the first
+          # heartbeat is fresh. Liveness is not checked until this passes, so a slow start
+          # (station list retries, waiting for postgres or ingest) is not mistaken for a hang.
+          startupProbe:
+            exec:
+              command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 60']
+            periodSeconds: 10
+            failureThreshold: 60
           livenessProbe:
             exec:
               command: [sh, -c, 'test $(( $(date +%s) - $(stat -c %Y /tmp/heartbeat) )) -lt 60']
-            initialDelaySeconds: 120      # waits for postgres and the station list first
             periodSeconds: 30

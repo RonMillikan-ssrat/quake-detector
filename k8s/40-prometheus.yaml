@@ -1,0 +1,113 @@
+# Prometheus: discovers annotated pods in this namespace through the Kubernetes API and
+# scrapes their /metrics every 15 s. Data lives in an emptyDir (lost if the pod is
+# rescheduled) -- fine for a demo; use a PersistentVolumeClaim to keep history.
+#
+# Open the UI:  kubectl -n quake port-forward svc/prometheus 9090:9090  ->  http://localhost:9090
+
+# --- identity and permissions: read pods in this namespace, nothing else ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: quake
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-discovery
+  namespace: quake
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-discovery
+  namespace: quake
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: quake
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: prometheus-discovery
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: quake
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: quake
+        kubernetes_sd_configs:
+          - role: pod                       # one target per pod (per container port)
+            namespaces: {names: [quake]}
+        relabel_configs:
+          # keep only pods annotated prometheus.io/scrape: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "true"
+            action: keep
+          # scrape the port named in prometheus.io/port at the pod's IP
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # copy useful pod metadata onto every series
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: quake
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: prometheus}
+  template:
+    metadata:
+      labels: {app: prometheus}
+    spec:
+      serviceAccountName: prometheus          # API calls for discovery use this identity
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.53.0
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+          ports: [{containerPort: 9090}]
+          volumeMounts:
+            - {name: config, mountPath: /etc/prometheus}
+            - {name: data, mountPath: /prometheus}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          readinessProbe:
+            httpGet: {path: /-/ready, port: 9090}
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap: {name: prometheus-config}
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: quake
+spec:
+  selector: {app: prometheus}
+  ports: [{port: 9090}]

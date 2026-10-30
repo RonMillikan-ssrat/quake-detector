@@ -8,7 +8,10 @@ image runs under docker compose and Kubernetes; in Kubernetes they come from a C
 import json
 import os
 import re
+import signal
 import socket
+import sys
+import threading
 import time
 import zlib
 from pathlib import Path
@@ -181,3 +184,20 @@ def load_stations(bus, timeout=600):
 def beat():
     """Liveness heartbeat: a probe fails if this file goes stale."""
     HEARTBEAT.touch()
+
+
+# ---------------------------------------------------------------- shutdown
+STOP = threading.Event()
+
+
+def handle_signals(exit_now=False):
+    """Kubernetes stops a pod with SIGTERM, then SIGKILL after the grace period
+    (30 s default). Loops check STOP and finish their current cycle; exit_now=True is
+    for ingest, whose SeedLink loop blocks inside the library and is safe to cut."""
+    def handler(signum, frame):
+        print(f"signal {signum}: shutting down", flush=True)
+        STOP.set()
+        if exit_now:
+            sys.exit(0)
+    signal.signal(signal.SIGTERM, handler)
+    signal.signal(signal.SIGINT, handler)

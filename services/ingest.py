@@ -17,7 +17,8 @@ import time
 from obspy.clients.seedlink.easyseedlink import EasySeedLinkClient
 from prometheus_client import Counter, Gauge, start_http_server
 
-from services.common import Bus, beat, cfg, get_stations, publish_stations, shard_of
+from services.common import (STOP, Bus, beat, cfg, get_stations, handle_signals,
+                             publish_stations, shard_of)
 
 RECORDS = Counter("qd_ingest_records_total", "miniSEED records received", ["station"])
 LAST = Gauge("qd_ingest_last_sample_unixtime", "End time of newest sample", ["station"])
@@ -55,6 +56,7 @@ class Feed(EasySeedLinkClient):
 
 def main():
     c = cfg()
+    handle_signals(exit_now=True)
     start_http_server(c.metrics_port)
     bus = Bus(c.redis_url)
     bus.wait()
@@ -67,6 +69,8 @@ def main():
     for s in stations:
         feed.select_stream(s["net"], s["sta"], f"{s['band']}?")
     feed.run()                       # blocks while streaming
+    if STOP.is_set():
+        sys.exit(0)
     print("SeedLink feed ended; exiting so the orchestrator restarts us", flush=True)
     sys.exit(1)
 

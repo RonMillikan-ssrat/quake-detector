@@ -21,7 +21,7 @@ from obspy import UTCDateTime
 from obspy.geodetics import gps2dist_azimuth
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
-from services.common import Bus, beat, cfg, load_stations
+from services.common import STOP, Bus, beat, cfg, handle_signals, load_stations
 
 ASSOC = Histogram("qd_assoc_seconds", "PyOcto seconds per run",
                   buckets=(0.1, 0.25, 0.5, 1, 2, 5, 10, 30))
@@ -54,6 +54,7 @@ def connect_db(dsn, timeout=120):
 
 def main():
     c = cfg()
+    handle_signals()
     start_http_server(c.metrics_port)
     bus = Bus(c.redis_url)
     bus.wait()
@@ -75,7 +76,7 @@ def main():
     picks, reported, last = [], [], "$"
     new_since_run, pending = False, False
     next_t = time.time() + c.step_s
-    while True:
+    while not STOP.is_set():
         last, entries = bus.read("picks", last, block_ms=(next_t - time.time()) * 1000)
         for f in entries:
             p = dict(station=f[b"station"].decode(), phase=f[b"phase"].decode(),
@@ -130,6 +131,8 @@ def main():
             LATENCY.observe(age)
             print(f"EVENT  origin {str(UTCDateTime(e.time))[:22]}  {e.latitude:.3f} "
                   f"{e.longitude:.3f}  {n_sta} sta {n_p} picks  latency {age:.0f} s", flush=True)
+    db.close()
+    print("associator stopped cleanly", flush=True)
 
 
 if __name__ == "__main__":
