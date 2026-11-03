@@ -24,6 +24,10 @@ homogeneous velocity model (Vp 5.5, Vs 3.1 km/s).
 | …rejected by both | 0 |
 | Inference cost | 0.34 s CPU per station-hour |
 
+<a href="docs/images/event_03.png"><img width="100%" alt="Record section for detected event 3 (2026-10-11 07:52:54 UTC, 31.680, -104.448, not in catalog): vertical and horizontal waveforms from 10 TexNet stations sorted by distance, with PhaseNet P and S picks and the arrivals the velocity model predicts" src="docs/images/event_03.png" /></a>
+
+*Event 3, one of the uncataloged detections. Stations are sorted by distance from the detected hypocenter. Solid blue/red lines are PhaseNet P/S picks; dotted lines are the arrivals the homogeneous velocity model predicts. A grey station label means a nearby station had no pick. Click the image to open it at full resolution, where you can zoom in or download it.*
+
 Known limitations
 - Locations of well-recorded events are offset ~5 km from catalog, consistently in one
   direction; attributed to the homogeneous velocity model. Depths are grid-quantized
